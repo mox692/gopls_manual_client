@@ -13,5 +13,6 @@ require (
 	github.com/sourcegraph/go-langserver v2.0.0+incompatible
 	github.com/sourcegraph/jsonrpc2 v0.1.0
 	golang.org/x/net v0.0.0-20210521195947-fe42d452be8f // indirect
-	golang.org/x/tools v0.1.1 // indirect
+	golang.org/x/tools v0.1.1
+	golang.org/x/tools/gopls v0.6.11 // indirect
 )
