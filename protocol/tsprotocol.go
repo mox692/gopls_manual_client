@@ -1,3 +1,8 @@
+/**
+ * these struct is referenced from  golang/tools/internal/lsp/protocol/tsprotocol.go
+ * ref: https://github.com/golang/tools/blob/master/internal/lsp/protocol/tsprotocol.go
+ */
+
 // Copyright 2019 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -7,8 +12,6 @@
 // commit: d58c00bbf8837b9fd0144924db5e7b1c543d839e
 // last fetched Sat Apr 17 2021 08:26:29 GMT-0400 (Eastern Daylight Time)
 package protocol
-
-// Code generated (see typescript/README.md) DO NOT EDIT.
 
 import "encoding/json"
 
