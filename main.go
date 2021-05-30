@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"os"
-	"path/filepath"
-
+	"github.com/mox692/gopls_manual_clien/protocol"
 	"github.com/sourcegraph/go-langserver/langserver/util"
 	"github.com/sourcegraph/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
-	// "golang.org/x/tools/internal/lsp/protocol"
+	"net"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 /**
@@ -23,7 +23,7 @@ type clientHandler struct {
 
 type InitializeParams struct {
 	RootPath string
-	RootURI  string
+	RootURI  lsp.DocumentURI
 }
 
 type DocumentHighlightParams struct {
@@ -98,17 +98,37 @@ func (c *clientHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *js
 	}
 }
 
+type handshakeRequest struct {
+	// ServerID is the ID of the server on the client. This should usually be 0.
+	ServerID string `json:"serverID"`
+	// Logfile is the location of the clients log file.
+	Logfile string `json:"logfile"`
+	// DebugAddr is the client debug address.
+	DebugAddr string `json:"debugAddr"`
+	// GoplsPath is the path to the Gopls binary running the current client
+	// process.
+	GoplsPath string `json:"goplsPath"`
+}
+type handshakeResponse struct {
+	// SessionID is the server session associated with the client.
+	SessionID string `json:"sessionID"`
+	// Logfile is the location of the server logs.
+	Logfile string `json:"logfile"`
+	// DebugAddr is the server debug address.
+	DebugAddr string `json:"debugAddr"`
+	// GoplsPath is the path to the Gopls binary running the current server
+	// process.
+	GoplsPath string `json:"goplsPath"`
+}
+
 func main() {
-	c, err := net.Dial("tcp", ":1234")
+	c, err := net.Dial("tcp", ":37374")
 	if err != nil {
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
 	}
 
 	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), &clientHandler{})
-
-	fmt.Printf("%+v\n", conn)
-	done := make(chan bool)
 
 	fullpath, err := filepath.Abs(".")
 	uri := util.PathToURI(fullpath)
@@ -119,54 +139,46 @@ func main() {
 	fmt.Println(uri)
 	params := InitializeParams{
 		RootPath: fullpath,
+		RootURI:  uri,
 	}
 
 	var got interface{}
 	err = conn.Call(context.Background(), "initialize", params, &got)
-
-	// fmt.Printf("%+v\n", got)
 
 	b, err := json.Marshal(got)
 
 	if err != nil {
 		panic(err)
 	}
-
 	fmt.Println()
 	fmt.Println(string(b))
 
-	fmt.Println("initial Call done!!!")
+	fmt.Println("initial Call done!! next handshake...")
 
-	var got2 interface{}
-	params2 := &DocumentHighlightParams{
-		TextDocumentPositionParams: TextDocumentPositionParams{
-			TextDocument: TextDocumentIdentifier{
-				URI: "file:///Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client",
-			},
-			Position: Position{
-				Line: 3,
-			},
-		},
-	}
-
-	err = conn.Call(context.Background(), "textDocument/documentHighlight", params2, &got2)
+	// next, send handShake method...
+	time.Sleep(time.Second * 1)
+	handshakeReq := handshakeRequest{}
+	handshakeRes := handshakeResponse{}
+	err = conn.Call(context.Background(), "gopls/handshake", handshakeReq, &handshakeRes)
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
+	fmt.Printf("handshake result: %+v\n", handshakeRes)
 
-	b2, _ := json.Marshal(got2)
+	// wait for message from server...
+	go waitReq()
 
-	if err != nil {
-		panic(err)
+	time.Sleep(time.Second * 1)
+
+	// req didchange to server...
+	didChangeParams := protocol.DidChangeTextDocumentParams{}
+	err = conn.Call(context.Background(), "textDocument/didChange", params, &got)
+
+}
+
+func waitReq() {
+	for {
+		time.Sleep(time.Second * 1)
 	}
-
-	fmt.Println()
-	fmt.Println(string(b2))
-
-	fmt.Println("b2 Call done!!!")
-
-	go func() {
-		<-conn.DisconnectNotify()
-		done <- true
-	}()
 }
