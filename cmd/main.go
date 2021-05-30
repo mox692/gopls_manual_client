@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/mox692/gopls_manual_client/client"
 	"github.com/mox692/gopls_manual_client/protocol"
 	"github.com/sourcegraph/go-langserver/langserver/util"
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -20,42 +21,56 @@ import (
  * these struct is referenced from  golang/tools/internal/lsp/protocol/tsprotocol.go
  * ref: https://github.com/golang/tools/blob/master/internal/lsp/protocol/tsprotocol.go
  */
-type clientHandler struct {
-}
+// type clientHandler struct {
+// }
 
-func (c *clientHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
-	fmt.Printf("called!! request is : %+v\n", req)
-	if !req.Notif {
-		return
-	}
+// func (c *clientHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
+// 	fmt.Printf("called!! request is : %+v\n", req)
+// 	if !req.Notif {
+// 		return
+// 	}
 
-	switch req.Method {
-	case "textDocument/documentHighlight":
-		var params lsp.PublishDiagnosticsParams
-		b, _ := req.Params.MarshalJSON()
-		json.Unmarshal(b, &params)
-	}
-}
+// 	switch req.Method {
+// 	case "textDocument/documentHighlight":
+// 		var params lsp.PublishDiagnosticsParams
+// 		b, _ := req.Params.MarshalJSON()
+// 		json.Unmarshal(b, &params)
+// 	}
+// }
 
 func main() {
+	var logger *log.Logger
 	var (
-		port = flag.String("port", "37374", "gopls's port")
+		port    = flag.String("port", "37374", "gopls's port")
+		logfile = flag.String("logfile", "", "logfile")
 	)
 	flag.Parse()
 
+	if *logfile != "" {
+		f, err := os.OpenFile(*logfile, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+
+		logger = log.New(f, "", log.LstdFlags)
+	} else {
+		logger = log.New(os.Stdout, "", log.LstdFlags)
+	}
+
 	c, err := net.Dial("tcp", ":"+*port)
 	if err != nil {
-		fmt.Printf("%s\n", err.Error())
-		os.Exit(1)
+		logger.Fatal(err)
 	}
 
-	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), &clientHandler{})
+	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), &client.ClientHandler{})
 
 	fullpath, err := filepath.Abs(".")
-	uri := util.PathToURI(fullpath)
 	if err != nil {
-		panic(err)
+		logger.Fatal(err)
 	}
+
+	uri := util.PathToURI(fullpath)
 
 	params := protocol.InitializeParams{
 		RootPath: fullpath,
@@ -64,33 +79,29 @@ func main() {
 
 	var initializeRes interface{}
 	err = conn.Call(context.Background(), "initialize", params, &initializeRes)
+	if err != nil {
+		logger.Fatal(err)
+	}
 
 	b, err := json.Marshal(initializeRes)
-
 	if err != nil {
-		panic(err)
+		logger.Fatal(err)
 	}
-	fmt.Println()
-	fmt.Println(string(b))
 
-	fmt.Println("initial Call done!! next handshake...")
+	logger.Printf("initial Call done, initialize response: %s\n", string(b))
 
 	// next, send handShake method...
-	time.Sleep(time.Second * 1)
 	handshakeReq := protocol.HandshakeRequest{}
 	handshakeRes := protocol.HandshakeResponse{}
 	err = conn.Call(context.Background(), "gopls/handshake", handshakeReq, &handshakeRes)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		logger.Fatal(err)
 	}
-	fmt.Printf("handshake result: %+v\n", handshakeRes)
+	logger.Printf("handshake response: %+v\n", handshakeRes)
 
 	// wait for message from server...
 	ctx, cancel := context.WithCancel(context.Background())
 	go waitReq(ctx)
-
-	time.Sleep(time.Second * 1)
 
 	// req didchange to server...
 	var didChangeResult interface{}
