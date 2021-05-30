@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mox692/gopls_manual_clien/protocol"
-	"github.com/sourcegraph/go-langserver/langserver/util"
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
-	"github.com/sourcegraph/jsonrpc2"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/mox692/gopls_manual_client/protocol"
+	"github.com/sourcegraph/go-langserver/langserver/util"
+	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/sourcegraph/jsonrpc2"
 )
 
 /**
@@ -167,18 +168,41 @@ func main() {
 	fmt.Printf("handshake result: %+v\n", handshakeRes)
 
 	// wait for message from server...
-	go waitReq()
+	ctx, cancel := context.WithCancel(context.Background())
+	go waitReq(ctx)
 
 	time.Sleep(time.Second * 1)
 
 	// req didchange to server...
-	didChangeParams := protocol.DidChangeTextDocumentParams{}
-	err = conn.Call(context.Background(), "textDocument/didChange", params, &got)
+	var didChangeResult interface{}
+	didChangeParams := protocol.DidChangeTextDocumentParams{
+		TextDocument: protocol.VersionedTextDocumentIdentifier{
+			Version: 2,
+			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
+				URI: "dammyURI",
+			},
+		},
+	}
+	err = conn.Call(context.Background(), "textDocument/didChange", didChangeParams, &didChangeResult)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
+	fmt.Printf("didChange Result: %+v\n", didChangeResult)
+	cancel()
+
+	fmt.Println("cancel done!! program exit...")
 }
 
-func waitReq() {
+func waitReq(ctx context.Context) {
 	for {
 		time.Sleep(time.Second * 1)
+		select {
+		case <-ctx.Done():
+			fmt.Printf("Done\n")
+			return
+		default:
+		}
 	}
 }
