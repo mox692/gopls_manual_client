@@ -103,6 +103,28 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go waitReq(ctx)
 
+	// req didOpen to server...
+	didOpenReq := protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:        "",
+			LanguageID: "go",
+			Version:    1,
+			Text: `
+			package main
+
+			func main() {
+				fmt.Println("hello 世界")
+			}
+			`,
+		},
+	}
+	var didOpenRes interface{}
+	err = conn.Call(context.Background(), "textDocument/didOpen", didOpenReq, didOpenRes)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	logger.Printf("didOpen success. didOpenres: %+v\n", didOpenRes)
+
 	// req didchange to server...
 	var didChangeResult interface{}
 	didChangeParams := protocol.DidChangeTextDocumentParams{
@@ -121,18 +143,19 @@ func main() {
 
 	fmt.Printf("didChange Result: %+v\n", didChangeResult)
 	cancel()
-
+	time.Sleep(time.Second * 100000)
 	fmt.Println("cancel done!! program exit...")
 }
 
 func waitReq(ctx context.Context) {
 	for {
 		time.Sleep(time.Second * 1)
-		select {
-		case <-ctx.Done():
-			fmt.Printf("waitReq Done...\n")
-			return
-		default:
-		}
+		fmt.Println("fdsafs")
+		// select {
+		// case <-ctx.Done():
+		// 	fmt.Printf("waitReq Done...\n")
+		// 	return
+		// default:
+		// }
 	}
 }
