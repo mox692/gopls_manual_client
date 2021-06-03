@@ -151,11 +151,11 @@ func waitReq(ctx context.Context) {
 	for {
 		time.Sleep(time.Second * 1)
 		fmt.Println("fdsafs")
-		// select {
-		// case <-ctx.Done():
-		// 	fmt.Printf("waitReq Done...\n")
-		// 	return
-		// default:
-		// }
+		select {
+		case <-ctx.Done():
+			fmt.Printf("waitReq Done...\n")
+			return
+		default:
+		}
 	}
 }
