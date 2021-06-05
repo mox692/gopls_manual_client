@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/mox692/gopls_manual_client/client"
@@ -17,57 +19,69 @@ import (
 	"github.com/sourcegraph/jsonrpc2"
 )
 
-/**
- * these struct is referenced from  golang/tools/internal/lsp/protocol/tsprotocol.go
- * ref: https://github.com/golang/tools/blob/master/internal/lsp/protocol/tsprotocol.go
- */
-// type clientHandler struct {
-// }
-
-// func (c *clientHandler) Handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.Request) {
-// 	fmt.Printf("called!! request is : %+v\n", req)
-// 	if !req.Notif {
-// 		return
-// 	}
-
-// 	switch req.Method {
-// 	case "textDocument/documentHighlight":
-// 		var params lsp.PublishDiagnosticsParams
-// 		b, _ := req.Params.MarshalJSON()
-// 		json.Unmarshal(b, &params)
-// 	}
-// }
+var (
+	ExitSuccess = 0
+	ExitFail    = 1
+)
 
 func main() {
-	var logger *log.Logger
+	os.Exit(start())
+}
+
+func start() int {
 	var (
-		port    = flag.String("port", "37374", "gopls's port")
-		logfile = flag.String("logfile", "", "logfile")
+		yamlfile = flag.String("yamlfile", "", "config file")
 	)
 	flag.Parse()
 
-	if *logfile != "" {
-		f, err := os.OpenFile(*logfile, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-
-		logger = log.New(f, "", log.LstdFlags)
-	} else {
-		logger = log.New(os.Stdout, "", log.LstdFlags)
-	}
-
-	c, err := net.Dial("tcp", ":"+*port)
+	// load config
+	config, err := client.LoadConfig(*yamlfile)
 	if err != nil {
-		logger.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		return ExitFail
+	}
+	logger := config.Logger
+	logger.Printf("Load config done.\n")
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGKILL, syscall.SIGINT, syscall.SIGTERM)
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- run(config)
+	}()
+
+	select {
+	case err := <-errCh:
+		finish(config)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return ExitFail
+		}
+		logger.Println("Exit Success.")
+		return ExitSuccess
+	case signal := <-sigCh:
+		logger.Printf("Get Signal %d, soon shutdown...\n", signal)
+		finish(config)
+		return ExitSuccess
 	}
 
-	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), &client.ClientHandler{})
+}
+
+func run(config *client.Config) error {
+	logger := config.Logger
+	c, err := net.Dial("tcp", ":"+config.Port)
+	if err != nil {
+		return err
+	}
+	handler := client.NewHandler(config)
+
+	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), handler)
 
 	fullpath, err := filepath.Abs(".")
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 
 	uri := util.PathToURI(fullpath)
@@ -80,12 +94,12 @@ func main() {
 	var initializeRes interface{}
 	err = conn.Call(context.Background(), "initialize", params, &initializeRes)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 
 	b, err := json.Marshal(initializeRes)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 
 	logger.Printf("initial Call done, initialize response: %s\n", string(b))
@@ -95,13 +109,13 @@ func main() {
 	handshakeRes := protocol.HandshakeResponse{}
 	err = conn.Call(context.Background(), "gopls/handshake", handshakeReq, &handshakeRes)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 	logger.Printf("handshake response: %+v\n", handshakeRes)
 
 	// wait for message from server...
-	ctx, cancel := context.WithCancel(context.Background())
-	go waitReq(ctx)
+	ctx := (context.Background())
+	go waitReq(ctx, config)
 
 	// req didOpen to server...
 	didOpenReq := protocol.DidOpenTextDocumentParams{
@@ -121,9 +135,15 @@ func main() {
 	var didOpenRes interface{}
 	err = conn.Call(context.Background(), "textDocument/didOpen", didOpenReq, didOpenRes)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 	logger.Printf("didOpen success. didOpenres: %+v\n", didOpenRes)
+
+	// TODO: cli interface
+	errCh := make(chan error)
+	go func() {
+		errCh <- startCli(conn, config)
+	}()
 
 	// req didchange to server...
 	var didChangeResult interface{}
@@ -141,19 +161,42 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("didChange Result: %+v\n", didChangeResult)
-	cancel()
+	logger.Printf("didChange Result: %+v\n", didChangeResult)
 	time.Sleep(time.Second * 100000)
 	fmt.Println("cancel done!! program exit...")
+
+	// wait cli mode
+	err = <-errCh
+	return err
 }
 
-func waitReq(ctx context.Context) {
+func startCli(conn *jsonrpc2.Conn, config *client.Config) error {
+	reqester := client.NewRequester(conn, config)
+	var sc = bufio.NewScanner(os.Stdin)
+	var err error
+
+	fmt.Println("Start cli mode. Please enter the method name you want to send to the language server.")
+	for {
+		if sc.Scan() {
+			err = reqester.CallMethod(sc.Text(), config)
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func finish(config *client.Config) {
+	// logfileのclose
+	config.Logfile.Close()
+}
+
+func waitReq(ctx context.Context, config *client.Config) {
 	for {
 		time.Sleep(time.Second * 1)
-		fmt.Println("fdsafs")
 		select {
 		case <-ctx.Done():
-			fmt.Printf("waitReq Done...\n")
+			config.Logger.Printf("waitReq Done...\n")
 			return
 		default:
 		}
