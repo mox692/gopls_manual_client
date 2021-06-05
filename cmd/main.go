@@ -41,8 +41,9 @@ import (
 func main() {
 	var logger *log.Logger
 	var (
-		port    = flag.String("port", "37375", "gopls's port")
-		logfile = flag.String("logfile", "", "logfile")
+		port     = flag.String("port", "37375", "gopls's port")
+		yamlfile = flag.String("yamlfile", "", "config file")
+		logfile  = flag.String("logfile", "", "logfile")
 	)
 	flag.Parse()
 
@@ -63,7 +64,10 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	config := client.LoadConfig()
+	config, err := client.LoadConfig(*yamlfile)
+	if err != nil {
+		logger.Fatal(err)
+	}
 	handler := client.NewHandler(config)
 
 	conn := jsonrpc2.NewConn(context.Background(), jsonrpc2.NewBufferedStream(c, jsonrpc2.VSCodeObjectCodec{}), handler)
