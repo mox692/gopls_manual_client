@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	logfile string
-	port    string
-	logger  *log.Logger
+	Logfile *os.File
+	Port    string
+	Logger  *log.Logger
 }
 
 type inputConfig struct {
@@ -26,7 +26,7 @@ func LoadConfig(yamlfile string) (*Config, error) {
 	if err != nil {
 		log.Println("efm-langserver: no configuration file")
 		// return default configs.
-		return &Config{logger: log.New(os.Stdout, "", log.LstdFlags)}, nil
+		return &Config{Logger: log.New(os.Stdout, "", log.LstdFlags)}, nil
 	}
 	defer f.Close()
 
@@ -44,18 +44,18 @@ func initConfig(config *inputConfig) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		log.Printf("logging to : %s\n", logfile)
 		return &Config{
-			logfile: config.Logfile,
-			logger:  log.New(f, "", log.LstdFlags),
-			port:    config.Port,
+			Logfile: f,
+			Logger:  log.New(f, "", log.LstdFlags),
+			Port:    config.Port,
 		}, nil
 	}
 
 	return &Config{
-		logfile: config.Logfile,
-		logger:  log.New(os.Stdout, "", log.LstdFlags),
-		port:    config.Port,
+		Logfile: os.Stdout,
+		Logger:  log.New(os.Stdout, "", log.LstdFlags),
+		Port:    config.Port,
 	}, nil
 }
 
@@ -65,7 +65,7 @@ type ClientHandler struct {
 
 func NewHandler(config *Config) *ClientHandler {
 	handler := &ClientHandler{
-		logger: config.logger,
+		logger: config.Logger,
 	}
 	return handler
 }
