@@ -51,7 +51,6 @@ func initConfig(config *inputConfig) (*Config, error) {
 			Port:    config.Port,
 		}, nil
 	}
-
 	return &Config{
 		Logfile: os.Stdout,
 		Logger:  log.New(os.Stdout, "", log.LstdFlags),
