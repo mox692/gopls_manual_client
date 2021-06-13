@@ -1,2 +1,2 @@
-logfile: "/Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/client_debuglog"
-port: "37375"
+# logfile: "/Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/client_debuglog"
+port: "37374"

@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/mox692/gopls_manual_client/client"
 	"github.com/mox692/gopls_manual_client/protocol"
@@ -83,16 +82,25 @@ func run(config *client.Config) error {
 	if err != nil {
 		return err
 	}
-
 	uri := util.PathToURI(fullpath)
+	logger.Printf("Using URI is %s", uri)
 
-	params := protocol.InitializeParams{
-		RootPath: fullpath,
-		RootURI:  protocol.DocumentURI(string(uri)),
+	/***************
+		initialize
+	****************/
+	initializesParams := protocol.InitializeParams{
+		RootPath:     fullpath,
+		RootURI:      protocol.DocumentURI(string(uri)),
+		Capabilities: protocol.ClientCapabilities{},
+		WorkspaceFolders: []protocol.WorkspaceFolder{
+			{
+				URI:  "file:///Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/workspace",
+				Name: "dummy_workspace",
+			},
+		},
 	}
-
 	var initializeRes interface{}
-	err = conn.Call(context.Background(), "initialize", params, &initializeRes)
+	err = conn.Call(context.Background(), "initialize", initializesParams, &initializeRes)
 	if err != nil {
 		return err
 	}
@@ -104,6 +112,24 @@ func run(config *client.Config) error {
 
 	logger.Printf("initial Call done, initialize response: %s\n", string(b))
 
+	/***************
+		initialized
+	****************/
+	var initializedParams protocol.InitializedParams
+	var initializedRes interface{}
+	err = conn.Call(context.Background(), "initialized", initializedParams, &initializedRes)
+	if err != nil {
+		return err
+	}
+	b, err = json.Marshal(initializeRes)
+	if err != nil {
+		return err
+	}
+	logger.Printf("send initialized Call done, initialized response: %s\n", string(b))
+
+	/***************
+		handshake
+	****************/
 	// next, send handShake method...
 	handshakeReq := protocol.HandshakeRequest{}
 	handshakeRes := protocol.HandshakeResponse{}
@@ -113,14 +139,12 @@ func run(config *client.Config) error {
 	}
 	logger.Printf("handshake response: %+v\n", handshakeRes)
 
-	// wait for message from server...
-	ctx := (context.Background())
-	go waitReq(ctx, config)
-
-	// req didOpen to server...
+	/***************
+		didOpen
+	****************/
 	didOpenReq := protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
-			URI:        "",
+			URI:        protocol.DocumentURI("file:///Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/workspace/test.go"),
 			LanguageID: "go",
 			Version:    1,
 			Text: `
@@ -145,25 +169,25 @@ func run(config *client.Config) error {
 		errCh <- startCli(conn, config)
 	}()
 
-	// req didchange to server...
-	var didChangeResult interface{}
-	didChangeParams := protocol.DidChangeTextDocumentParams{
-		TextDocument: protocol.VersionedTextDocumentIdentifier{
-			Version: 2,
-			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
-				URI: "dammyURI",
-			},
-		},
-	}
-	err = conn.Call(context.Background(), "textDocument/didChange", didChangeParams, &didChangeResult)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// // req didchange to server...
+	// var didChangeResult interface{}
+	// didChangeParams := protocol.DidChangeTextDocumentParams{
+	// 	TextDocument: protocol.VersionedTextDocumentIdentifier{
+	// 		Version: 2,
+	// 		TextDocumentIdentifier: protocol.TextDocumentIdentifier{
+	// 			URI: "dammyURI",
+	// 		},
+	// 	},
+	// }
+	// err = conn.Call(context.Background(), "textDocument/didChange", didChangeParams, &didChangeResult)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
-	logger.Printf("didChange Result: %+v\n", didChangeResult)
-	time.Sleep(time.Second * 100000)
-	fmt.Println("cancel done!! program exit...")
+	// logger.Printf("didChange Result: %+v\n", didChangeResult)
+	// time.Sleep(time.Second * 100000)
+	// fmt.Println("cancel done!! program exit...")
 
 	// wait cli mode
 	err = <-errCh
@@ -189,16 +213,4 @@ func startCli(conn *jsonrpc2.Conn, config *client.Config) error {
 func finish(config *client.Config) {
 	// logfileのclose
 	config.Logfile.Close()
-}
-
-func waitReq(ctx context.Context, config *client.Config) {
-	for {
-		time.Sleep(time.Second * 1)
-		select {
-		case <-ctx.Done():
-			config.Logger.Printf("waitReq Done...\n")
-			return
-		default:
-		}
-	}
 }

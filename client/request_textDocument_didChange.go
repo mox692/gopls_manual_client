@@ -21,7 +21,22 @@ var didChangeParams = protocol.DidChangeTextDocumentParams{
 	TextDocument: protocol.VersionedTextDocumentIdentifier{
 		Version: 2,
 		TextDocumentIdentifier: protocol.TextDocumentIdentifier{
-			URI: "dummyURI",
+			URI: "file:///Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/workspace/test.go",
+		},
+	},
+	ContentChanges: []protocol.TextDocumentContentChangeEvent{
+		{
+			Range: &protocol.Range{
+				Start: protocol.Position{
+					Line:      1,
+					Character: 5,
+				},
+				End: protocol.Position{
+					Line:      1,
+					Character: 3,
+				},
+			},
+			Text: "fdsa",
 		},
 	},
 }
