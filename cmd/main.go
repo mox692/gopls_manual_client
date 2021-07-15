@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"os/signal"
@@ -15,6 +17,7 @@ import (
 	"github.com/mox692/gopls_manual_client/client"
 	"github.com/mox692/gopls_manual_client/protocol"
 	"github.com/sourcegraph/go-langserver/langserver/util"
+	"github.com/sourcegraph/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -142,18 +145,17 @@ func run(config *client.Config) error {
 	/***************
 		didOpen
 	****************/
+	text, err := readFile(config.InitOpenFile)
+	if err != nil {
+		return err
+	}
+
 	didOpenReq := protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.DocumentURI("file:///Users/kimuramotoyuki/go/src/github.com/mox692/gopls_manual_client/workspace/test.go"),
 			LanguageID: "go",
 			Version:    1,
-			Text: `
-			package main
-
-			func main() {
-				fmt.Println("hello 世界")
-			}
-			`,
+			Text:       string(text),
 		},
 	}
 	var didOpenRes interface{}
@@ -213,4 +215,18 @@ func startCli(conn *jsonrpc2.Conn, config *client.Config) error {
 func finish(config *client.Config) {
 	// logfileのclose
 	config.Logfile.Close()
+}
+
+func readFile(pathOrUri string) ([]byte, error) {
+	if util.IsURI(lsp.DocumentURI(pathOrUri)) {
+		pathOrUri = util.UriToPath(lsp.DocumentURI(pathOrUri))
+	}
+	bytes, err := ioutil.ReadFile(pathOrUri)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes) > 1024*1024 {
+		return nil, errors.New("Read fileSize must be less than 1MB.")
+	}
+	return bytes, nil
 }

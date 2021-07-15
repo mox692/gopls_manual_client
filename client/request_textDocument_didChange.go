@@ -28,15 +28,15 @@ var didChangeParams = protocol.DidChangeTextDocumentParams{
 		{
 			Range: &protocol.Range{
 				Start: protocol.Position{
-					Line:      1,
-					Character: 5,
+					Line:      5,
+					Character: 16,
 				},
 				End: protocol.Position{
-					Line:      1,
-					Character: 3,
+					Line:      5,
+					Character: 25,
 				},
 			},
-			Text: "fdsa",
+			Text: "書き換え!!",
 		},
 	},
 }
