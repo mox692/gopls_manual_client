@@ -10,14 +10,16 @@ import (
 )
 
 type Config struct {
-	Logfile *os.File
-	Port    string
-	Logger  *log.Logger
+	Logfile      *os.File
+	Port         string
+	Logger       *log.Logger
+	InitOpenFile string
 }
 
 type inputConfig struct {
-	Logfile string `yaml:"logfile"`
-	Port    string `yaml:"port"`
+	Logfile      string `yaml:"logfile"`
+	Port         string `yaml:"port"`
+	InitOpenFile string `yaml:"init_open_file"`
 }
 
 func LoadConfig(yamlfile string) (*Config, error) {
@@ -46,15 +48,17 @@ func initConfig(config *inputConfig) (*Config, error) {
 		}
 		log.Printf("logging to : %s\n", logfile)
 		return &Config{
-			Logfile: f,
-			Logger:  log.New(f, "", log.LstdFlags),
-			Port:    config.Port,
+			Logfile:      f,
+			Logger:       log.New(f, "", log.LstdFlags),
+			InitOpenFile: config.InitOpenFile,
+			Port:         config.Port,
 		}, nil
 	}
 	return &Config{
-		Logfile: os.Stdout,
-		Logger:  log.New(os.Stdout, "", log.LstdFlags),
-		Port:    config.Port,
+		Logfile:      os.Stdout,
+		Logger:       log.New(os.Stdout, "", log.LstdFlags),
+		InitOpenFile: config.InitOpenFile,
+		Port:         config.Port,
 	}, nil
 }
 
